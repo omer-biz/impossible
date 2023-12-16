@@ -1,11 +1,10 @@
 module Main exposing (main)
 
 import Browser
-import Html exposing (Html, button, div, input, span, text, time)
+import Html exposing (Html, button, div, input, text)
 import Html.Attributes exposing (value)
 import Html.Events exposing (onClick, onInput)
-import Process
-import Task
+import Time
 
 
 type alias Question =
@@ -20,14 +19,19 @@ type History
         }
 
 
-type Status
-    = NoStatus
-    | Notification String
+type StatusState
+    = Notification String
     | TextDeleted String Question
 
 
+type alias Status =
+    { timer : Int
+    , state : StatusState
+    }
+
+
 type alias Model =
-    { status : Status, questions : History }
+    { status : List Status, questions : History }
 
 
 type Msg
@@ -36,13 +40,14 @@ type Msg
     | DeleteQuestion
     | NextQuestion
     | PreviousQuestion
-    | TimerEnded
-    | UndoDelete Question
+    | Tick Time.Posix
+    | UndoDeleteAndRemove Question Int
+    | RemoveStatus Int
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Model NoStatus <|
+    ( Model [] <|
         History
             { previous = [ Question "Why ?" Nothing ]
             , current = Question "How are you feeling today ?" Nothing
@@ -105,25 +110,61 @@ addQuestion question (History history) =
     History { history | previous = history.current :: history.previous, current = question }
 
 
+removeFromList : Int -> List a -> List a
+removeFromList i xs =
+    List.take i xs ++ List.drop (i + 1) xs
+
+
+statusDelay : number
+statusDelay =
+    11
+
+
+statusWithTimer : StatusState -> Status
+statusWithTimer =
+    Status statusDelay
+
+
+decrementByOne : List Status -> List Status
+decrementByOne statuses =
+    let
+        minusOne status =
+            { status | timer = status.timer - 1 }
+    in
+    statuses
+        |> List.map minusOne
+        |> List.filter (\stat -> stat.timer > 0)
+
+
+nothing : Html msg
+nothing =
+    text ""
+
+
 view : Model -> Html Msg
 view model =
-    div [] [ viewStatus model.status, viewHistory model.questions ]
+    div [] [ viewStatuses model.status, viewHistory model.questions ]
 
 
-viewStatus : Status -> Html Msg
-viewStatus status =
-    case status of
-        NoStatus ->
-            div [] []
+viewStatuses : List Status -> Html Msg
+viewStatuses status =
+    let
+        viewStatus statusIndex stat =
+            case stat.state of
+                Notification message ->
+                    div [ onClick <| RemoveStatus statusIndex ] [ text message, text <| String.fromInt stat.timer ]
 
-        Notification message ->
-            div [] [ text message ]
-
-        TextDeleted message question ->
-            div []
-                [ text message
-                , button [ onClick <| UndoDelete question ] [ text "Undo" ]
-                ]
+                TextDeleted message question ->
+                    div [ onClick <| RemoveStatus statusIndex ]
+                        [ text message
+                        , button [ onClick <| UndoDeleteAndRemove question statusIndex ] [ text "Undo" ]
+                        , text <| String.fromInt stat.timer
+                        ]
+    in
+    div []
+        (status
+            |> List.indexedMap viewStatus
+        )
 
 
 viewHistory : History -> Html Msg
@@ -134,14 +175,14 @@ viewHistory (History history) =
                 button [ onClick NextQuestion ] [ text "Next" ]
 
             else
-                span [] []
+                nothing
 
         prevButton =
             if List.length history.previous > 0 then
                 button [ onClick PreviousQuestion ] [ text "Prev" ]
 
             else
-                span [] []
+                nothing
     in
     div [] [ prevButton, viewQuestion history.current, nextButton ]
 
@@ -169,7 +210,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         SaveQuestion ->
-            ( { model | status = Notification "Question:  Saved" }, startTimer TimerEnded 10000 )
+            ( { model | status = (statusWithTimer <| Notification "Question:  Saved") :: model.status }, Cmd.none )
 
         NextQuestion ->
             ( { model | questions = nextQuestion model.questions }, Cmd.none )
@@ -180,8 +221,15 @@ update msg model =
         ChangeQuestion input ->
             ( { model | questions = updateCurrentQuestion model.questions input }, Cmd.none )
 
-        TimerEnded ->
-            ( { model | status = NoStatus }, Cmd.none )
+        Tick _ ->
+            ( { model
+                | status = decrementByOne model.status
+              }
+            , Cmd.none
+            )
+
+        RemoveStatus index ->
+            ( { model | status = removeFromList index model.status }, Cmd.none )
 
         DeleteQuestion ->
             let
@@ -195,23 +243,17 @@ update msg model =
                     else
                         TextDeleted "Question: Deleted" <| Tuple.first deleteQue
             in
-            ( { model | status = status, questions = Tuple.second deleteQue }
-            , startTimer TimerEnded 10000
+            ( { model | status = (statusWithTimer <| status) :: model.status, questions = Tuple.second deleteQue }
+            , Cmd.none
             )
 
-        UndoDelete question ->
+        UndoDeleteAndRemove question index ->
             ( { model
-                | status = Notification "Question: Restored"
+                | status = (statusWithTimer <| Notification "Question: Restored") :: removeFromList index model.status
                 , questions = addQuestion question model.questions
               }
-            , startTimer TimerEnded 10000
+            , Cmd.none
             )
-
-
-startTimer : Msg -> Float -> Cmd Msg
-startTimer msg time =
-    Process.sleep time
-        |> Task.perform (\_ -> msg)
 
 
 updateCurrentQuestion : History -> String -> History
@@ -224,11 +266,20 @@ updateAnswer question answer =
     { question | answer = Just answer }
 
 
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    if List.length model.status > 0 then
+        Time.every 1000 Tick
+
+    else
+        Sub.none
+
+
 main : Program () Model Msg
 main =
     Browser.element
         { init = init
         , view = view
         , update = update
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = subscriptions
         }
