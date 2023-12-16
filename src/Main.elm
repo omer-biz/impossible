@@ -87,9 +87,7 @@ prevQuestion (History history) =
 
 lenQuestions : History -> Int
 lenQuestions (History { previous, next }) =
-    List.length previous
-        |> (+) (List.length next)
-        |> (+) 1
+    List.length previous + List.length next + 1
 
 
 deleteCurrentQuestion : History -> ( Question, History )
