@@ -1,31 +1,7 @@
 module Main exposing (main)
 
 import Browser
-import Element
-    exposing
-        ( alignLeft
-        , alignRight
-        , centerX
-        , column
-        , el
-        , fill
-        , focused
-        , height
-        , layout
-        , mouseDown
-        , mouseOver
-        , padding
-        , paddingXY
-        , pointer
-        , px
-        , rgb255
-        , rgba255
-        , row
-        , spacing
-        , spacingXY
-        , text
-        , width
-        )
+import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border exposing (roundEach)
 import Element.Events exposing (onClick)
@@ -131,7 +107,7 @@ deleteCurrentQuestion : History -> ( Question, History )
 deleteCurrentQuestion (History { previous, current, next }) =
     case ( previous, next ) of
         ( [], [] ) ->
-            ( current, History { previous = previous, current = current, next = next } )
+            ( current, History { previous = [], current = current, next = [] } )
 
         ( newCurr :: restPrev, restNext ) ->
             ( current, History { previous = restPrev, current = newCurr, next = restNext } )
@@ -282,7 +258,7 @@ viewQuestion question =
     column [ spacing 20 ]
         [ el [ centerX ] <| text question.question
         , Input.text
-            ([ width <| px 200, centerX ] ++ inputStyle)
+            ([ width <| px 250, centerX ] ++ inputStyle)
             { onChange = ChangeQuestion
             , text = answerValue
             , placeholder = Just <| Input.placeholder [] (text "Your response here")
@@ -385,31 +361,31 @@ main =
 sidePrevStyle : List (Element.Attribute msg)
 sidePrevStyle =
     [ padding 10
-    , Background.color <| rgb255 0xC4 0xA1 0xFF
+    , Background.color <| purple Soft
     , Border.width 2
     , roundEach { topLeft = 0, topRight = 5, bottomLeft = 0, bottomRight = 5 }
     , height fill
-    , mouseDown [ Background.color <| rgb255 0x97 0x23 0xC9 ]
-    , mouseOver [ Background.color <| rgb255 0xA3 0x88 0xEE ]
+    , mouseDown [ Background.color <| purple Hard ]
+    , mouseOver [ Background.color <| purple Medium ]
     ]
 
 
 sideNextStyle : List (Element.Attribute msg)
 sideNextStyle =
     [ padding 10
-    , Background.color <| rgb255 0xA6 0xFA 0xFF
+    , Background.color <| cyan Soft
     , Border.width 2
     , roundEach { topLeft = 5, topRight = 0, bottomLeft = 5, bottomRight = 0 }
     , height fill
-    , mouseDown [ Background.color <| rgb255 0x00 0xE1 0xEF ]
-    , mouseOver [ Background.color <| rgb255 0x79 0xF7 0xFF ]
+    , mouseDown [ Background.color <| cyan Hard ]
+    , mouseOver [ Background.color <| cyan Medium ]
     ]
 
 
 disabledSideBtn : List (Element.Attribute msg)
 disabledSideBtn =
     [ padding 10
-    , Background.color <| rgb255 0xBF 0xBF 0xBF
+    , Background.color <| grey Soft
     , Border.width 2
     , roundEach { topLeft = 5, topRight = 0, bottomLeft = 5, bottomRight = 0 }
     , height fill
@@ -419,9 +395,9 @@ disabledSideBtn =
 inputStyle : List (Element.Attribute msg)
 inputStyle =
     [ padding 10
-    , focused [ Background.color <| rgb255 0xFF 0xA6 0xF6, borderShadow ]
+    , focused [ Background.color <| pink Soft, borderShadow ]
     , Border.width 2
-    , Border.color <| rgb255 0x00 0x00 0x00
+    , Border.color <| black Hard
     , Font.size 15
     ]
 
@@ -434,11 +410,11 @@ borderShadow =
 btnStyle : List (Element.Attribute msg)
 btnStyle =
     [ padding 7
-    , Background.color <| rgb255 0xB8 0xFF 0x9F
+    , Background.color <| green Soft
     , Border.width 2
     , borderShadow
-    , mouseDown [ Background.color <| rgb255 0x7D 0xF7 0x52 ]
-    , mouseOver [ Background.color <| rgb255 0x9D 0xFC 0x7C ]
+    , mouseDown [ Background.color <| green Hard ]
+    , mouseOver [ Background.color <| green Medium ]
     , focused [ borderShadow ]
     , Border.rounded 7
     ]
@@ -447,11 +423,11 @@ btnStyle =
 btnDelStyle : List (Element.Attribute msg)
 btnDelStyle =
     [ padding 7
-    , Background.color <| rgb255 0xFF 0x55 0x55
+    , Background.color <| red Soft
     , Border.width 2
     , borderShadow
-    , mouseDown [ Background.color <| rgb255 0xD9 0x53 0x4F ]
-    , mouseOver [ Background.color <| rgb255 0xE7 0x4C 0x3C ]
+    , mouseDown [ Background.color <| red Hard ]
+    , mouseOver [ Background.color <| red Medium ]
     , focused [ borderShadow ]
     , Border.rounded 7
     ]
@@ -460,11 +436,11 @@ btnDelStyle =
 btnUndoStyle : List (Element.Attribute msg)
 btnUndoStyle =
     [ padding 7
-    , Background.color <| rgb255 0xFF 0xA6 0xF6
+    , Background.color <| pink Soft
     , Border.width 2
     , borderShadow
-    , mouseDown [ Background.color <| rgb255 0xF7 0x74 0xEA ]
-    , mouseOver [ Background.color <| rgb255 0xFA 0x8C 0xEF ]
+    , mouseDown [ Background.color <| pink Hard ]
+    , mouseOver [ Background.color <| pink Medium ]
     , focused [ borderShadow ]
     , Border.rounded 7
     , Font.size 15
@@ -473,11 +449,74 @@ btnUndoStyle =
 
 statusStyle : List (Element.Attribute msg)
 statusStyle =
-    [ Border.color <| rgb255 0x00 0x00 0x00
-    , Background.color <| rgb255 0xFF 0xFF 0xFF
+    [ Border.color <| black Hard
+    , Background.color <| white Hard
     , borderShadow
     , Border.width 2
     , width <| px 220
     , spacingXY 10 15
     , paddingXY 10 5
     ]
+
+
+
+-- Color
+
+
+type Accent
+    = Soft
+    | Medium
+    | Hard
+
+
+color : Color -> Color -> Color -> Accent -> Color
+color soft medium hard accent =
+    case accent of
+        Soft ->
+            soft
+
+        Medium ->
+            medium
+
+        Hard ->
+            hard
+
+
+pink : Accent -> Color
+pink =
+    color (rgb255 0xFF 0xA6 0xF6) (rgb255 0xFA 0x8C 0xEF) (rgb255 0xF7 0x74 0xEA)
+
+
+red : Accent -> Color
+red =
+    color (rgb255 0xFF 0x55 0x55) (rgb255 0xE7 0x4C 0x3C) (rgb255 0xD9 0x53 0x4F)
+
+
+green : Accent -> Color
+green =
+    color (rgb255 0xB8 0xFF 0x9F) (rgb255 0x9D 0xFC 0x7C) (rgb255 0x7D 0xF7 0x52)
+
+
+black : Accent -> Color
+black =
+    color (rgb255 0x00 0x00 0x00) (rgb255 0x00 0x00 0x00) (rgb255 0x00 0x00 0x00)
+
+
+grey : Accent -> Color
+grey =
+    color (rgb255 0xBF 0xBF 0xBF) (rgb255 0x00 0x00 0x00) (rgb255 0x00 0x00 0x00)
+
+
+cyan : Accent -> Color
+cyan =
+    color (rgb255 0xA6 0xFA 0xFF) (rgb255 0x79 0xF7 0xFF) (rgb255 0x00 0xE1 0xEF)
+
+
+purple : Accent -> Color
+purple =
+    color (rgb255 0xC4 0xA1 0xFF) (rgb255 0xA3 0x88 0xEE) (rgb255 0x97 0x23 0xC9)
+
+
+white : Accent -> Color
+white =
+    color (rgb255 0xFF 0xFF 0xFF) (rgb255 0xFF 0xFF 0xFF) (rgb255 0xFF 0xFF 0xFF)
