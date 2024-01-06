@@ -20,12 +20,11 @@ type alias Question =
     { question : String, answer : Maybe String }
 
 
-type History
-    = History
-        { previous : List Question
-        , current : Question
-        , next : List Question
-        }
+type alias History =
+    { previous : List Question
+    , current : Question
+    , next : List Question
+    }
 
 
 type StatusState
@@ -52,16 +51,16 @@ type Msg
     | Tick Time.Posix
     | UndoDeleteAndRemove Question Int
     | RemoveStatus Int
+    | ViewAtIndex Int
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( Model [] <|
-        History
-            { previous = [ Question "Why ?" Nothing ]
-            , current = Question "How are you feeling today ?" Nothing
-            , next = [ Question "What do you think about ?" Nothing ]
-            }
+        { previous = [ Question "Why ?" Nothing, Question "What is .. ?" Nothing ]
+        , current = Question "How are you feeling today ?" Nothing
+        , next = [ Question "What are you thinking about ?" Nothing, Question "And yet another question ?" Nothing ]
+        }
     , Cmd.none
     )
 
@@ -71,59 +70,105 @@ init _ =
 
 
 nextQuestion : History -> History
-nextQuestion (History history) =
+nextQuestion history =
     case history.next of
         [] ->
-            History history
+            history
 
         newNext :: rest ->
-            History
-                { previous = history.current :: history.previous
-                , current = newNext
-                , next = rest
-                }
+            { previous = history.current :: history.previous
+            , current = newNext
+            , next = rest
+            }
 
 
 prevQuestion : History -> History
-prevQuestion (History history) =
+prevQuestion history =
     case history.previous of
         [] ->
-            History history
+            history
 
         newPrev :: rest ->
-            History
-                { previous = rest
-                , current = newPrev
-                , next = history.current :: history.next
-                }
+            { previous = rest
+            , current = newPrev
+            , next = history.current :: history.next
+            }
 
 
 lenQuestions : History -> Int
-lenQuestions (History { previous, next }) =
+lenQuestions { previous, next } =
     List.length previous + List.length next + 1
 
 
 deleteCurrentQuestion : History -> ( Question, History )
-deleteCurrentQuestion (History { previous, current, next }) =
+deleteCurrentQuestion { previous, current, next } =
     case ( previous, next ) of
         ( [], [] ) ->
-            ( current, History { previous = [], current = current, next = [] } )
+            ( current, { previous = [], current = current, next = [] } )
 
         ( newCurr :: restPrev, restNext ) ->
-            ( current, History { previous = restPrev, current = newCurr, next = restNext } )
+            ( current, { previous = restPrev, current = newCurr, next = restNext } )
 
         ( restPrev, newCurr :: restNext ) ->
-            ( current, History { previous = restPrev, current = newCurr, next = restNext } )
+            ( current, { previous = restPrev, current = newCurr, next = restNext } )
 
 
 addQuestion : Question -> History -> History
-addQuestion question (History history) =
-    History { history | previous = history.current :: history.previous, current = question }
+addQuestion question history =
+    { history | previous = history.current :: history.previous, current = question }
 
 
 removeFromList : Int -> List a -> List a
 removeFromList i xs =
     List.take i xs ++ List.drop (i + 1) xs
+
+
+resetCurQuestion : Int -> History -> History
+resetCurQuestion idx ({ previous } as history) =
+    if idx < List.length previous then
+        shiftPrevious idx history
+
+    else if idx > List.length previous then
+        shiftNext idx history
+
+    else
+        history
+
+
+shiftPrevious : Int -> History -> History
+shiftPrevious idx ({ previous, current, next } as history) =
+    let
+        revList =
+            List.reverse previous
+    in
+    case List.drop idx revList of
+        curr :: rest ->
+            { history
+                | previous = List.reverse <| List.take idx revList
+                , current = curr
+                , next = rest ++ current :: next
+            }
+
+        _ ->
+            history
+
+
+shiftNext : Int -> History -> History
+shiftNext idx ({ previous, current, next } as history) =
+    let
+        newIdx =
+            idx - List.length previous - 1
+    in
+    case List.drop newIdx next of
+        curr :: rest ->
+            { history
+                | previous = current :: List.take newIdx next ++ previous
+                , current = curr
+                , next = rest
+            }
+
+        _ ->
+            history
 
 
 
@@ -132,12 +177,8 @@ removeFromList i xs =
 
 decrementByOne : List Status -> List Status
 decrementByOne statuses =
-    let
-        minusOne status =
-            { status | timer = status.timer - 1 }
-    in
     statuses
-        |> List.map minusOne
+        |> List.map (\status -> { status | timer = status.timer - 1 })
         |> List.filter (\stat -> stat.timer > 0)
 
 
@@ -205,7 +246,7 @@ viewNotifications status =
 
 
 viewHistory : History -> Element.Element Msg
-viewHistory (History history) =
+viewHistory history =
     let
         nextButton =
             if List.length history.next > 0 then
@@ -223,9 +264,38 @@ viewHistory (History history) =
     in
     row [ width fill, {- explain Debug.todo, -} height fill ]
         [ prevButton
-        , column [ centerX, spacing 20 ] [ viewQuestion history.current, viewControl <| lenQuestions (History history) ]
+        , column [ centerX, width fill, height fill ]
+            [ column [ centerX, centerY, spacing 20 ]
+                [ viewQuestion history.current, viewControl <| lenQuestions history ]
+            , viewPagination history
+            ]
         , nextButton
         ]
+
+
+viewPagination : History -> Element Msg
+viewPagination history =
+    let
+        isActiveQue idx =
+            if idx == List.length history.previous then
+                selectedPageBtnStyle
+
+            else
+                pageBtnStyle
+
+        pageBtn idx =
+            Input.button (isActiveQue idx)
+                { onPress = Just <| ViewAtIndex idx
+                , label = text <| String.fromInt (idx + 1)
+                }
+
+        -- TODO: When it's no longer to show all the number of questions
+        -- add `next`` and `prev` buttons
+    in
+    row [ alignBottom, centerX, spacingXY 15 0, paddingXY 0 30 ]
+        (List.range 0 (lenQuestions history - 1)
+            |> List.map pageBtn
+        )
 
 
 viewControl : Int -> Element.Element Msg
@@ -246,21 +316,12 @@ viewControl qLen =
 
 viewQuestion : Question -> Element.Element Msg
 viewQuestion question =
-    let
-        answerValue =
-            case question.answer of
-                Just answer ->
-                    answer
-
-                Nothing ->
-                    ""
-    in
     column [ spacing 20 ]
         [ el [ centerX ] <| text question.question
         , Input.text
             ([ width <| px 250, centerX ] ++ inputStyle)
             { onChange = ChangeQuestion
-            , text = answerValue
+            , text = Maybe.withDefault "" question.answer
             , placeholder = Just <| Input.placeholder [] (text "Your response here")
             , label = Input.labelHidden "Answer"
             }
@@ -316,10 +377,13 @@ update msg model =
             , Cmd.none
             )
 
+        ViewAtIndex idx ->
+            ( { model | questions = resetCurQuestion (Debug.log "idx" idx) model.questions }, Cmd.none )
+
 
 updateCurrentQuestion : History -> String -> History
-updateCurrentQuestion (History history) input =
-    History { history | current = updateAnswer history.current input }
+updateCurrentQuestion history input =
+    { history | current = updateAnswer history.current input }
 
 
 updateAnswer : Question -> String -> Question
@@ -459,6 +523,33 @@ statusStyle =
     ]
 
 
+pageBtnStyle : List (Attribute msg)
+pageBtnStyle =
+    [ Border.width 2
+    , Background.color <| pink Soft
+    , paddingXY 5 2
+    , Border.rounded 7
+    , Font.size 16
+    , borderShadow
+    , pointer
+    , mouseDown [ Background.color <| pink Hard ]
+    , mouseOver [ Background.color <| pink Medium ]
+    , focused [ borderShadow ]
+    ]
+
+
+selectedPageBtnStyle : List (Attribute msg)
+selectedPageBtnStyle =
+    [ Border.width 2
+    , Background.color <| cream Medium
+    , paddingXY 5 2
+    , Border.rounded 7
+    , Font.size 16
+    , borderShadow
+    , focused [ borderShadow ]
+    ]
+
+
 
 -- Color
 
@@ -515,6 +606,11 @@ cyan =
 purple : Accent -> Color
 purple =
     color (rgb255 0xC4 0xA1 0xFF) (rgb255 0xA3 0x88 0xEE) (rgb255 0x97 0x23 0xC9)
+
+
+cream : Accent -> Color
+cream =
+    color (rgb255 0xFD 0xFD 0x96) (rgb255 0xFF 0xD8 0x58) (rgb255 0xF4 0xD7 0x38)
 
 
 white : Accent -> Color
