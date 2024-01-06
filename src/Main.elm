@@ -253,14 +253,14 @@ viewHistory history =
                 Input.button (alignRight :: sideNextStyle) { onPress = Just NextQuestion, label = text "Next" }
 
             else
-                Input.button (alignRight :: disabledSideBtn) { onPress = Nothing, label = text "Next" }
+                Input.button (alignRight :: disabledNextBtn) { onPress = Nothing, label = text "Next" }
 
         prevButton =
             if List.length history.previous > 0 then
                 Input.button (alignLeft :: sidePrevStyle) { onPress = Just PreviousQuestion, label = text "Prev" }
 
             else
-                Input.button (alignLeft :: disabledSideBtn) { onPress = Nothing, label = text "Prev" }
+                Input.button (alignLeft :: disabledPrevBtn) { onPress = Nothing, label = text "Prev" }
     in
     row [ width fill, {- explain Debug.todo, -} height fill ]
         [ prevButton
@@ -446,12 +446,22 @@ sideNextStyle =
     ]
 
 
-disabledSideBtn : List (Element.Attribute msg)
-disabledSideBtn =
+disabledNextBtn : List (Element.Attribute msg)
+disabledNextBtn =
     [ padding 10
     , Background.color <| grey Soft
     , Border.width 2
     , roundEach { topLeft = 5, topRight = 0, bottomLeft = 5, bottomRight = 0 }
+    , height fill
+    ]
+
+
+disabledPrevBtn : List (Element.Attribute msg)
+disabledPrevBtn =
+    [ padding 10
+    , Background.color <| grey Soft
+    , Border.width 2
+    , roundEach { topLeft = 0, topRight = 5, bottomLeft = 0, bottomRight = 5 }
     , height fill
     ]
 
