@@ -1,6 +1,7 @@
 module Main exposing (main)
 
 import Browser
+import Browser.Events
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border exposing (roundEach)
@@ -39,7 +40,10 @@ type alias Status =
 
 
 type alias Model =
-    { status : List Status, questions : History }
+    { status : List Status
+    , questions : History
+    , device : Device
+    }
 
 
 type Msg
@@ -52,15 +56,24 @@ type Msg
     | UndoDeleteAndRemove Question Int
     | RemoveStatus Int
     | ViewAtIndex Int
+    | SetDevice Device
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    ( Model [] <|
-        { previous = [ Question "Why ?" Nothing, Question "What is .. ?" Nothing ]
-        , current = Question "How are you feeling today ?" Nothing
-        , next = [ Question "What are you thinking about ?" Nothing, Question "And yet another question ?" Nothing ]
-        }
+type alias Flags =
+    { width : Int, height : Int }
+
+
+questions : { previous : List Question, current : Question, next : List Question }
+questions =
+    { previous = [ Question "Why ?" Nothing, Question "What is .. ?" Nothing ]
+    , current = Question "How are you feeling today ?" Nothing
+    , next = [ Question "What are you thinking about ?" Nothing, Question "And yet another question ?" Nothing ]
+    }
+
+
+init : Flags -> ( Model, Cmd Msg )
+init flags =
+    ( Model [] questions <| classifyDevice { width = flags.width, height = flags.height }
     , Cmd.none
     )
 
@@ -203,10 +216,56 @@ nothing =
 
 view : Model -> Html Msg
 view model =
-    layout [ Background.color <| rgb255 0xEA 0xE5 0xD7 ] <|
-        column
-            [ width fill, height fill ]
-            [ viewNotifications model.status, viewHistory model.questions ]
+    let
+        responsiveLayout =
+            model
+                |> (case ( model.device.class, model.device.orientation ) of
+                        ( Phone, Portrait ) ->
+                            phoneLayout
+
+                        ( Desktop, Portrait ) ->
+                            phoneLayout
+
+                        _ ->
+                            desktopLayout
+                   )
+    in
+    layout [ Background.color <| rgb255 0xEA 0xE5 0xD7, width fill, height fill ] responsiveLayout
+
+
+phoneLayout : Model -> Element Msg
+phoneLayout model =
+    column [ width fill, height fill ]
+        [ viewQuestions model.questions
+        , viewNotifications model.status
+        ]
+
+
+desktopLayout : Model -> Element Msg
+desktopLayout model =
+    column
+        [ width fill, height fill ]
+        [ viewNotifications model.status
+        , viewHistory model.questions
+        ]
+
+
+nextButton : Bool -> List (Attribute Msg) -> List (Attribute Msg) -> Element Msg
+nextButton enabled attrStyle disbledStyle =
+    if enabled then
+        Input.button attrStyle { onPress = Just NextQuestion, label = text "Next" }
+
+    else
+        Input.button disbledStyle { onPress = Nothing, label = text "Next" }
+
+
+prevButton : Bool -> List (Attribute Msg) -> List (Attribute Msg) -> Element Msg
+prevButton enabled attrStyle disabledStyle =
+    if enabled then
+        Input.button attrStyle { onPress = Just PreviousQuestion, label = text "Prev" }
+
+    else
+        Input.button disabledStyle { onPress = Nothing, label = text "Prev" }
 
 
 viewNotifications : List Status -> Element.Element Msg
@@ -217,7 +276,15 @@ viewNotifications status =
 
         viewNotification statusIndex stat =
             column statusStyle <|
-                (el [ onClick <| RemoveStatus statusIndex, customCss "position" "absolute", alignRight, pointer ] <| text "✘")
+                (el
+                    [ onClick <| RemoveStatus statusIndex
+                    , customCss "position" "absolute"
+                    , alignRight
+                    , pointer
+                    ]
+                 <|
+                    text "✘"
+                )
                     :: (case stat.state of
                             Notification message ->
                                 [ text message ]
@@ -247,29 +314,19 @@ viewNotifications status =
 
 viewHistory : History -> Element.Element Msg
 viewHistory history =
-    let
-        nextButton =
-            if List.length history.next > 0 then
-                Input.button (alignRight :: sideNextStyle) { onPress = Just NextQuestion, label = text "Next" }
+    row [ width fill, height fill ]
+        [ prevButton (List.length history.previous > 0) (alignLeft :: sidePrevStyle) disabledPrevBtn
+        , viewQuestions history
+        , nextButton (List.length history.next > 0) (alignRight :: sideNextStyle) disabledNextBtn
+        ]
 
-            else
-                Input.button (alignRight :: disabledNextBtn) { onPress = Nothing, label = text "Next" }
 
-        prevButton =
-            if List.length history.previous > 0 then
-                Input.button (alignLeft :: sidePrevStyle) { onPress = Just PreviousQuestion, label = text "Prev" }
-
-            else
-                Input.button (alignLeft :: disabledPrevBtn) { onPress = Nothing, label = text "Prev" }
-    in
-    row [ width fill, {- explain Debug.todo, -} height fill ]
-        [ prevButton
-        , column [ centerX, width fill, height fill ]
-            [ column [ centerX, centerY, spacing 20 ]
-                [ viewQuestion history.current, viewControl <| lenQuestions history ]
-            , viewPagination history
-            ]
-        , nextButton
+viewQuestions : { previous : List Question, next : List Question, current : Question } -> Element Msg
+viewQuestions history =
+    column [ centerX, width fill, height fill ]
+        [ column [ centerX, centerY, spacing 20 ]
+            [ viewQuestion history.current, viewControl <| lenQuestions history ]
+        , viewPagination history
         ]
 
 
@@ -317,7 +374,13 @@ viewControl qLen =
 viewQuestion : Question -> Element.Element Msg
 viewQuestion question =
     column [ spacing 20 ]
-        [ el [ centerX ] <| text question.question
+        [ el
+            [ centerX
+
+            {- , customCss "font-size" "calc(1.65 * (1.5vh + 1.1vw))" -}
+            ]
+          <|
+            text question.question
         , Input.text
             ([ width <| px 250, centerX ] ++ inputStyle)
             { onChange = ChangeQuestion
@@ -378,7 +441,10 @@ update msg model =
             )
 
         ViewAtIndex idx ->
-            ( { model | questions = resetCurQuestion (Debug.log "idx" idx) model.questions }, Cmd.none )
+            ( { model | questions = resetCurQuestion idx model.questions }, Cmd.none )
+
+        SetDevice device ->
+            ( { model | device = device }, Cmd.none )
 
 
 updateCurrentQuestion : History -> String -> History
@@ -397,18 +463,22 @@ updateAnswer question answer =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    if List.length model.status > 0 then
-        Time.every 1000 Tick
+    Sub.batch
+        [ if List.length model.status > 0 then
+            Time.every 1000 Tick
 
-    else
-        Sub.none
+          else
+            Sub.none
+        , Browser.Events.onResize
+            (\w h -> SetDevice <| classifyDevice { width = w, height = h })
+        ]
 
 
 
 -- Main
 
 
-main : Program () Model Msg
+main : Program Flags Model Msg
 main =
     Browser.element
         { init = init
@@ -554,7 +624,7 @@ selectedPageBtnStyle =
     , Background.color <| cream Medium
     , paddingXY 5 2
     , Border.rounded 7
-    , Font.size 16
+    , Font.size 25
     , borderShadow
     , focused [ borderShadow ]
     ]

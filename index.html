@@ -1,0 +1,20 @@
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Impossible State</title>
+  <script src="main.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+  <div id="myapp"></div>
+  <script>
+    var app = Elm.Main.init({
+      node: document.getElementById('myapp'),
+      flags: {width: window.innerWidth, height: window.innerHeight}
+    });
+  </script>
+</body>
+
+</html>
